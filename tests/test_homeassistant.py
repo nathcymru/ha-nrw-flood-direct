@@ -12,6 +12,7 @@ from homeassistant.helpers import reload as reload_helper
 import custom_components.nrw_flood_direct as integration
 from custom_components.nrw_flood_direct.api import Client, ProviderError, StateStore, utcnow
 from custom_components.nrw_flood_direct.coordinator import FloodCoordinator
+from custom_components.nrw_flood_direct.geometry import location_hash
 from custom_components.nrw_flood_direct.sensor import CountSensor, StatusSensor, WarningsSensor
 
 
@@ -167,5 +168,33 @@ async def test_initial_api_failure_still_forwards_unavailable_entities(tmp_path,
         assert await integration.async_setup_entry(hass, configured)
         assert not configured.runtime_data.coordinator.fresh
         hass.config_entries.async_forward_entry_setups.assert_awaited_once()
+    finally:
+        await hass.async_stop()
+
+
+@pytest.mark.asyncio
+async def test_outside_home_coverage_does_not_mislabel_working_feed_as_api_failure(tmp_path):
+    hass = HomeAssistant(str(tmp_path))
+    hass.config.latitude, hass.config.longitude = 53, -3
+    try:
+        store = StateStore(hass)
+        await store.save_geometry(
+            {
+                "location_hash": location_hash(53, -3),
+                "resolved_at": utcnow().isoformat(),
+                "areas": {},
+            }
+        )
+        coord = FloodCoordinator(
+            hass, entry(), Client(Mock(), store, "SYNTHETIC_SECRET"), {"mode": "home"}
+        )
+        coord.client.get = AsyncMock(return_value=(feed(), {"Date": format_datetime(utcnow())}))
+        await coord.async_refresh()
+        warning = WarningsSensor(coord)
+        assert not warning.available and warning.native_value is None
+        assert warning.extra_state_attributes["scope"]["coverage_status"] == "outside_known_areas"
+        assert "does not mean no flood risk" in warning.extra_state_attributes["coverage_note"]
+        assert StatusSensor(coord).native_value == "available"
+        assert warning.extra_state_attributes["warnings"] is None
     finally:
         await hass.async_stop()
