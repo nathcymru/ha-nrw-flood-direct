@@ -1,0 +1,12 @@
+{
+  "domain": "nrw_flood_direct",
+  "name": "NRW Flood Direct",
+  "codeowners": ["@nathcymru"],
+  "config_flow": true,
+  "documentation": "https://github.com/nathcymru/ha-nrw-flood-direct",
+  "issue_tracker": "https://github.com/nathcymru/ha-nrw-flood-direct/issues",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "0.1.0"
+}

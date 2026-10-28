@@ -1,0 +1,3 @@
+nrw_flood_direct:
+  api_key: !secret nrw_flood_direct_api_key
+  mode: home

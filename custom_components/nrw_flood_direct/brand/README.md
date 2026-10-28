@@ -1,0 +1,1 @@
+Original shield-and-waves artwork for this independent community integration. Copyright2026 nathcymru, MIT. This is not an NRW logo. icon.svg is the editable source; PNGs provide Home Assistant brand sizes.

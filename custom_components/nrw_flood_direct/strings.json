@@ -1,0 +1,1 @@
+{"config":{"abort":{"yaml_required":"Configure NRW Flood Direct in configuration.yaml using an API !secret and explicit flood-area selection, then restart Home Assistant.","already_configured":"NRW Flood Direct is already configured."}}}
