@@ -45,11 +45,12 @@ def coordinator(hass):
     )
 
 
-def current_feed():
-    value = feature()
-    for key in ("TIMERAISED", "SEVERITY_CHANGED", "RIM_CHANGED"):
-        value["properties"][key] = int((utcnow() - timedelta(minutes=1)).timestamp() * 1000)
-    return feed(value)
+def current_feed(*features):
+    values = features or (feature(),)
+    for value in values:
+        for key in ("TIMERAISED", "SEVERITY_CHANGED", "RIM_CHANGED"):
+            value["properties"][key] = int((utcnow() - timedelta(minutes=1)).timestamp() * 1000)
+    return feed(*values)
 
 
 @pytest.mark.asyncio
@@ -178,7 +179,7 @@ async def test_initial_api_failure_still_forwards_unavailable_entities(tmp_path,
 
 
 @pytest.mark.asyncio
-async def test_outside_home_coverage_does_not_mislabel_working_feed_as_api_failure(tmp_path):
+async def test_complete_empty_home_selection_publishes_no_matching_warnings(tmp_path):
     hass = HomeAssistant(str(tmp_path))
     hass.config.latitude, hass.config.longitude = 53, -3
     try:
@@ -193,21 +194,85 @@ async def test_outside_home_coverage_does_not_mislabel_working_feed_as_api_failu
         coord = FloodCoordinator(
             hass, entry(), Client(Mock(), store, "SYNTHETIC_SECRET"), {"mode": "home"}
         )
-        coord.client.get = AsyncMock(return_value=(feed(), {"Date": format_datetime(utcnow())}))
+        # Active and cleared records elsewhere must not leak into an empty home selection.
+        nationwide = current_feed(*(feature(f"TEST{x}", x) for x in (1, 2, 3, 4)))
+        coord.client.get = AsyncMock(return_value=(nationwide, {"Date": format_datetime(utcnow())}))
         await coord.async_refresh()
         warning = WarningsSensor(coord)
-        assert not warning.available and warning.native_value is None
-        assert warning.extra_state_attributes["scope"]["coverage_status"] == "outside_known_areas"
-        assert "does not mean no flood risk" in warning.extra_state_attributes["coverage_note"]
+        assert warning.available and warning.native_value == "none"
+        assert warning.extra_state_attributes["scope"]["coverage_status"] == "no_matching_areas"
+        assert "not a flood-risk assessment" in warning.extra_state_attributes["coverage_note"]
         assert StatusSensor(coord).native_value == "available"
-        assert warning.extra_state_attributes["warnings"] is None
+        assert warning.extra_state_attributes["warnings"] == []
+        assert warning.extra_state_attributes["cleared_warnings"] == []
+        for level in (None, 1, 2, 3, 4):
+            count = CountSensor(coord, "test_count", "Test count", level)
+            assert count.available and count.native_value == 0
         warning.hass = hass
         published = warning._async_calculate_state()
-        assert published.state == "unavailable" and "scope" not in published.attributes
+        assert published.state == "none"
+        assert published.attributes["scope"]["area_codes"] == []
         coverage = CoverageSensor(coord)
         coverage.hass = hass
         published_coverage = coverage._async_calculate_state()
-        assert published_coverage.state == "outside_known_areas"
-        assert published_coverage.attributes["scope"]["coverage_status"] == "outside_known_areas"
+        assert published_coverage.state == "no_matching_areas"
+        assert published_coverage.attributes["scope"]["coverage_status"] == "no_matching_areas"
+
+        restored_store = StateStore(hass)
+        await restored_store.load()
+        restored = FloodCoordinator(
+            hass, entry(), Client(Mock(), restored_store, "SYNTHETIC_SECRET"), {"mode": "home"}
+        )
+        restored.client.get = AsyncMock()
+        await restored.async_refresh()
+        assert restored.fresh and WarningsSensor(restored).native_value == "none"
+        restored.client.get.assert_not_called()
+    finally:
+        await hass.async_stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failure",
+    ["feed_failed", "feed_stale", "selection_failed", "selection_stale", "selection_missing"],
+)
+async def test_empty_home_selection_never_hides_missing_or_failed_data(tmp_path, failure):
+    hass = HomeAssistant(str(tmp_path))
+    hass.config.latitude, hass.config.longitude = 53, -3
+    try:
+        store = StateStore(hass)
+        await store.save_geometry(
+            {
+                "location_hash": location_hash(53, -3),
+                "resolved_at": utcnow().isoformat(),
+                "areas": {},
+            }
+        )
+        coord = FloodCoordinator(
+            hass, entry(), Client(Mock(), store, "SYNTHETIC_SECRET"), {"mode": "home"}
+        )
+        coord.client.get = AsyncMock(
+            return_value=(current_feed(), {"Date": format_datetime(utcnow())})
+        )
+        await coord.async_refresh()
+        assert coord.fresh and WarningsSensor(coord).native_value == "none"
+        if failure == "feed_failed":
+            coord.last_update_success = False
+        elif failure == "feed_stale":
+            coord.data["fetched_at"] = (utcnow() - timedelta(minutes=31)).isoformat()
+        elif failure == "selection_failed":
+            await store.save_geometry(None, failure=True)
+        elif failure == "selection_stale":
+            store.data["geometry"]["resolved_at"] = (utcnow() - timedelta(days=2)).isoformat()
+        else:
+            store.data["geometry"] = None
+
+        warning = WarningsSensor(coord)
+        count = CountSensor(coord, "active_count", "Active count", None)
+        assert not warning.available and warning.native_value is None
+        assert warning.extra_state_attributes["warnings"] is None
+        assert not count.available and count.native_value is None
+        warning.hass = hass
+        assert warning._async_calculate_state().state == "unavailable"
     finally:
         await hass.async_stop()

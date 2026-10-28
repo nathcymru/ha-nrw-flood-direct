@@ -97,8 +97,8 @@ class WarningsSensor(FloodEntity):
             "warnings": summary["warnings"] if summary is not None else None,
             "cleared_warnings": summary["cleared_warnings"] if summary is not None else None,
             "coverage_note": (
-                "Home location is outside the published NRW warning and alert areas; this does not mean no flood risk"
-                if self.coordinator.scope.get("coverage_status") == "outside_known_areas"
+                "No published NRW warning or alert polygons matched the configured home point; this is an area-selection result, not a flood-risk assessment"
+                if self.coordinator.scope.get("coverage_status") == "no_matching_areas"
                 else "Matching NRW flood warning and alert areas; not all sources of flooding are covered"
             ),
         }

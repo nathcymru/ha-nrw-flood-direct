@@ -172,7 +172,7 @@ async def test_two_layers_cached_and_home_change_invalidates_without_leaking_coo
 
 
 @pytest.mark.asyncio
-async def test_outside_known_areas_is_distinct_from_clear_or_outage(tmp_path):
+async def test_complete_empty_area_selection_is_fresh(tmp_path):
     hass = HomeAssistant(str(tmp_path))
     hass.config.latitude, hass.config.longitude = 53, -3
     try:
@@ -181,9 +181,9 @@ async def test_outside_known_areas_is_distinct_from_clear_or_outage(tmp_path):
         )
         resolver = HomeAreas(hass, session, StateStore(hass))
         await resolver.resolve()
-        assert resolver.status == "outside_known_areas"
+        assert resolver.status == "no_matching_areas"
         assert resolver.scope["area_codes"] == []
-        assert not resolver.fresh
+        assert resolver.fresh
     finally:
         await hass.async_stop()
 

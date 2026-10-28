@@ -22,13 +22,15 @@ nrw_flood_direct:
 
 Check configuration and restart Home Assistant. The imported integration entry contains no credentials. A rejected key stops API requests until the integration is reloaded with corrected YAML.
 
-## Location and coverage
+## Location and area selection
 
 `home` uses the Home Assistant home coordinates and the official NRW **Flood Warning Areas** and **Flood Alert Areas** polygons published through DataMapWales. It requests an exact point intersection for each layer, verifies complete result counts and matching identifiers, then independently checks polygon membership including holes and boundaries. There is no radius or nearest-centroid fallback. The coordinates are sent only to the official DataMapWales service and are not exposed as entity attributes or stored in this integration's cache; a local location fingerprint invalidates matches when home moves.
 
-Geometry refreshes once a day, with a persistent cache, bounded responses, a maximum of 20 lookup requests per UTC day, and provider retry delays. A normal refresh uses two lookup requests. Failed or stale coverage is unavailable. Last-known area codes remain in the private cache for recovery, never as a current all-clear.
+Geometry refreshes once a day, with a persistent cache, bounded responses, a maximum of 20 lookup requests per UTC day, and provider retry delays. A normal refresh uses two lookup requests. Failed, unresolved or stale area selection makes warning/count sensors unavailable. Last-known area codes remain in the private cache for recovery, never as current data.
 
-If home is outside all published polygons, `sensor.nrw_flood_direct_coverage_status` reports `outside_known_areas`, and the main warnings sensor remains unavailable with a clear coverage note. **This does not mean no flood risk.** NRW's warning service does not cover all flooding, including surface water and small watercourses. See [NRW's explanation of its warning service](https://naturalresources.wales/flooding/sign-up-to-receive-flood-warnings/?lang=en).
+The live API reports current warnings; the published polygons separately define geographic areas used to select those warnings. A successful complete lookup with no matching polygons is a valid empty selection. With a fresh successful live feed, the warnings sensor reports `none` and all counts are zero: **no matching active warnings**. It does not report a coverage failure or select warnings from elsewhere in Wales.
+
+The diagnostic `sensor.nrw_flood_direct_coverage_status` reports `no_matching_areas` for that empty selection. Its stable entity ID and the `coverage_status` attribute are retained for compatibility; the diagnostic describes polygon matching, not overall NRW service coverage. It does not establish flood risk. NRW's warning service does not cover every source of flooding, including surface water and small watercourses. See [NRW's explanation of its warning service](https://naturalresources.wales/flooding/sign-up-to-receive-flood-warnings/?lang=en).
 
 Alternative explicit selections:
 
@@ -44,7 +46,7 @@ Or select `mode: all_wales` without `area_codes`. That scope is always labelled 
 
 ## Entity contract
 
-Every entity is enabled by default. The primary entity is `sensor.nrw_flood_direct_warnings`, with state `severe_flood_warning`, `flood_warning`, `flood_alert`, or `none`. Failed, malformed, stale or unknown coverage produces Home Assistant's `unavailable`, never `none` or a zero count.
+Every entity is enabled by default. The primary entity is `sensor.nrw_flood_direct_warnings`, with state `severe_flood_warning`, `flood_warning`, `flood_alert`, or `none`. Failed, malformed or stale feeds and failed, unresolved or stale area selection produce Home Assistant's `unavailable`, never `none` or a zero count. Successful empty matching results produce `none` and zero counts while the data remain fresh.
 
 Its attributes include:
 
@@ -56,13 +58,13 @@ Its attributes include:
 | `fetched_at` | Successful feed retrieval time, ISO UTC |
 | `response_time` | HTTP Date/Age freshness bound, not the warning's issue date |
 | `stale_after_seconds` | 1800 |
-| `coverage_note` | Human-readable limitations or outside-area status |
+| `coverage_note` | Human-readable area-selection diagnostic and limitations |
 
 Each normalized record has `id`, `area_code`, `area_name`, numeric `severity_code`, `severity`, `region`, nullable `tidal`, `raised`, `severity_changed`, `message_changed`, `message_english`, and `message_welsh`. Dates are ISO UTC; NRW's numeric Unix-millisecond timestamps are normalized explicitly. A record's change dates can precede its raised date. Those dates are never treated as an expiry time. No per-area link is invented.
 
-Additional sensors provide active total, each active severity count, separate cleared count, API status, last successful update, daily requests, and coverage status. Feed API status can be available while exact home coverage is outside known areas.
+Additional sensors provide active total, each active severity count, separate cleared count, API status, last successful update, daily requests, and area-selection status. Feed availability, polygon matching and warning counts are separate facts.
 
-Home Assistant removes extra attributes from unavailable entities. Consumers must read `sensor.nrw_flood_direct_coverage_status` for the current coverage scope when the main warnings entity is unavailable; that diagnostic remains available and includes the same `scope` object. Do not treat a missing main-entity attribute as proof of an API outage or as an empty warning list.
+Home Assistant removes extra attributes from unavailable entities. Consumers can read `sensor.nrw_flood_direct_coverage_status` for the current selection diagnostic when the main warnings entity is unavailable; that diagnostic remains available and includes the same `scope` object. A selection diagnostic alone never proves the live feed is fresh. Do not treat a missing main-entity attribute as an empty warning list.
 
 ## Freshness, quotas and privacy
 

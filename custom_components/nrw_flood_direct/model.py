@@ -184,7 +184,9 @@ def normalize(payload, now):
 
 def select(rows, configured_scope):
     codes = configured_scope["area_codes"]
-    chosen = [row for row in rows if not codes or row["area_code"] in codes]
+    chosen = [
+        row for row in rows if configured_scope["type"] == "all_wales" or row["area_code"] in codes
+    ]
     active = [row for row in chosen if row["severity_code"] < 4]
     cleared = [row for row in chosen if row["severity_code"] == 4]
     return {

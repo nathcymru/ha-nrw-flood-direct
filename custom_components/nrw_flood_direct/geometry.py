@@ -184,11 +184,13 @@ class HomeAreas:
             return "stale" if cached else "unknown"
         if not cached:
             return "unknown"
-        return "current" if cached["areas"] else "outside_known_areas"
+        return "current" if cached["areas"] else "no_matching_areas"
 
     @property
     def fresh(self):
-        return self.status == "current"
+        # A complete successful lookup is fresh even when no polygons match.
+        # Match count is a selection diagnostic, not a provider failure.
+        return self.status in ("current", "no_matching_areas")
 
     @property
     def scope(self):

@@ -39,6 +39,20 @@ def test_empty_and_explicit_area_filter_are_different_from_malformed():
             normalize(value, NOW)
 
 
+def test_empty_home_area_selection_never_expands_to_all_wales():
+    rows = normalize(feed(*(feature(f"TEST{x}", x) for x in (1, 2, 3, 4))), NOW)
+    selected = {
+        "type": "area_codes",
+        "area_codes": [],
+        "selection_method": "home_polygon",
+        "coverage_status": "no_matching_areas",
+    }
+    assert select(rows, selected) == {"warnings": [], "cleared_warnings": [], "level": "none"}
+    nationwide = select(rows, scope({"mode": "all_wales"}))
+    assert len(nationwide["warnings"]) == 3
+    assert len(nationwide["cleared_warnings"]) == 1
+
+
 @pytest.mark.parametrize(
     "config",
     [
