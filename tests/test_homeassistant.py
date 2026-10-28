@@ -13,7 +13,12 @@ import custom_components.nrw_flood_direct as integration
 from custom_components.nrw_flood_direct.api import Client, ProviderError, StateStore, utcnow
 from custom_components.nrw_flood_direct.coordinator import FloodCoordinator
 from custom_components.nrw_flood_direct.geometry import location_hash
-from custom_components.nrw_flood_direct.sensor import CountSensor, StatusSensor, WarningsSensor
+from custom_components.nrw_flood_direct.sensor import (
+    CountSensor,
+    CoverageSensor,
+    StatusSensor,
+    WarningsSensor,
+)
 
 
 def entry():
@@ -196,5 +201,13 @@ async def test_outside_home_coverage_does_not_mislabel_working_feed_as_api_failu
         assert "does not mean no flood risk" in warning.extra_state_attributes["coverage_note"]
         assert StatusSensor(coord).native_value == "available"
         assert warning.extra_state_attributes["warnings"] is None
+        warning.hass = hass
+        published = warning._async_calculate_state()
+        assert published.state == "unavailable" and "scope" not in published.attributes
+        coverage = CoverageSensor(coord)
+        coverage.hass = hass
+        published_coverage = coverage._async_calculate_state()
+        assert published_coverage.state == "outside_known_areas"
+        assert published_coverage.attributes["scope"]["coverage_status"] == "outside_known_areas"
     finally:
         await hass.async_stop()

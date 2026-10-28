@@ -62,6 +62,8 @@ Each normalized record has `id`, `area_code`, `area_name`, numeric `severity_cod
 
 Additional sensors provide active total, each active severity count, separate cleared count, API status, last successful update, daily requests, and coverage status. Feed API status can be available while exact home coverage is outside known areas.
 
+Home Assistant removes extra attributes from unavailable entities. Consumers must read `sensor.nrw_flood_direct_coverage_status` for the current coverage scope when the main warnings entity is unavailable; that diagnostic remains available and includes the same `scope` object. Do not treat a missing main-entity attribute as proof of an API outage or as an empty warning list.
+
 ## Freshness, quotas and privacy
 
 The integration retrieves the complete nationwide GeoJSON feed once every 15 minutes, shared by all sensors: normally 96 calls/day. Its local ceiling is 2700 calls per UTC day, below the portal's published 2880/day allowance. Each request is durably reserved before transmission, with at least six seconds between requests. The ledger survives restarts; a corrupt ledger blocks requests rather than resetting limits. Account use by other applications is outside this local counter.
